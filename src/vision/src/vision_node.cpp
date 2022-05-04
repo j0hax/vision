@@ -1,13 +1,16 @@
 #include <cv_bridge/cv_bridge.h>
+#include <geometry_msgs/PointStamped.h>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/opencv.hpp>
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
 #include <tf2_ros/transform_listener.h>
 
-ros::Publisher pub;
+// Publishers for Blue Square and Red Triangle
+ros::Publisher bs;
+ros::Publisher rt;
 
-void callback(const sensor_msgs::ImageConstPtr &img) {
+void person_callback(const sensor_msgs::ImageConstPtr &img) {
   cv_bridge::CvImagePtr cv_img_ptr;
   try {
     cv_img_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::BGR8);
@@ -16,24 +19,32 @@ void callback(const sensor_msgs::ImageConstPtr &img) {
     return;
   }
 
-  cv::Mat processed_img;
   /* RGB-Bild in HSV-Farbraum umändern:
    * https://docs.opencv.org/4.2.0/d8/d01/group__imgproc__color__conversions.html#gga4e0972be5de079fed4e3a10e24ef5ef0aa4a7f0ecf2e94150699e48c79139ee12
    */
+  cv::Mat processed_img;
   cv::cvtColor(cv_img_ptr->image, processed_img, cv::COLOR_BGR2HSV);
 
-  pub.publish(cv_bridge::CvImage(cv_img_ptr->header,
-                                 sensor_msgs::image_encodings::BGR8,
-                                 processed_img)
-                  .toImageMsg());
+  ROS_INFO("Processing image...");
+
+  // TODO: recognize target
+
+  // TODO: determine position via tf2
+
+  geometry_msgs::PointStamped point;
+
+  bs.publish(point);
 }
 
 int main(int argc, char **argv) {
   ros::init(argc, argv, "vision_node");
+
+  // TODO: create a seperate nodehandler and callback for red triangle
   ros::NodeHandle nh;
-  ros::Subscriber sub = nh.subscribe("/camera/image", 10, callback);
-  // ROS-Einführung s. 54: "Binärbild für jede Objektfarbe erzeugen"
-  pub = nh.advertise<sensor_msgs::Image>("/binary/red", 10);
-  // TODO: weitere Farbeinstellungen und Datentypen veröffentlichen
+  ros::Subscriber sub = nh.subscribe("/camera", 10, person_callback);
+
+  bs = nh.advertise<geometry_msgs::PointStamped>("/blue_square_pos", 10);
+  rt = nh.advertise<geometry_msgs::PointStamped>("/red_triangle_pos", 10);
+
   ros::spin();
 }
