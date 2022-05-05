@@ -19,15 +19,33 @@ void person_callback(const sensor_msgs::ImageConstPtr &img) {
     return;
   }
 
+  ROS_INFO("Processing image...");
+
   /* RGB-Bild in HSV-Farbraum umändern:
    * https://docs.opencv.org/4.2.0/d8/d01/group__imgproc__color__conversions.html#gga4e0972be5de079fed4e3a10e24ef5ef0aa4a7f0ecf2e94150699e48c79139ee12
    */
-  cv::Mat processed_img;
-  cv::cvtColor(cv_img_ptr->image, processed_img, cv::COLOR_BGR2HSV);
+  cv::Mat hsv;
 
-  ROS_INFO("Processing image...");
+  cv::cvtColor(cv_img_ptr->image, hsv, cv::COLOR_BGR2HSV);
 
-  // TODO: recognize target
+  /* HSV-Bild nach Farbschwellenwert filtern:
+   * https://docs.opencv.org/4.2.0/da/d97/tutorial_threshold_inRange.html
+   */
+
+  /*
+   * Minimum and maximum hues for blue:
+   * ca. 180 to 270 degrees
+   * TODO: find appropriate saturation and values for blues, replace `m`
+   */
+  cv::Mat filtered;
+  const double m = 255.0 / 2;
+
+  cv::Scalar min_b = cv::Scalar(180, m, m);
+  cv::Scalar max_b = cv::Scalar(270, m, m);
+
+  cv::inRange(hsv, min_b, max_b, filtered);
+
+  // TODO: Contour detection
 
   // TODO: determine position via tf2
 
