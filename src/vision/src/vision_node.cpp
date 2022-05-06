@@ -45,7 +45,18 @@ void person_callback(const sensor_msgs::ImageConstPtr &img) {
 
   cv::inRange(hsv, min_b, max_b, filtered);
 
-  // TODO: Contour detection
+  /*
+   * Search for contours in the binary image:
+   * https://docs.opencv.org/4.2.0/d3/dc0/group__imgproc__shape.html#gadf1ad6a0b82947fa1fe3c3d497f260e0
+   * RETR_EXTERNAL = retrieves only the extreme outer contours.
+   * CHAIN_APPROX_SIMPLE = compress into end points
+   * TODO: decide if matchShapes() is a better alternative
+   */
+  std::vector<std::vector<cv::Point>> contours;
+  cv::findContours(filtered, contours, cv::RETR_EXTERNAL,
+                   cv::CHAIN_APPROX_SIMPLE);
+
+  // TODO: process output array to determine if shape requirements are met
 
   // TODO: determine position via tf2
 
