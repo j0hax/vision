@@ -32,16 +32,15 @@ void person_callback(const sensor_msgs::ImageConstPtr& img) {
    * https://docs.opencv.org/4.2.0/da/d97/tutorial_threshold_inRange.html
    */
 
+  cv::Mat filtered;
+
   /*
    * Minimum and maximum hues for blue:
-   * ca. 180 to 270 degrees
-   * TODO: find appropriate saturation and values for blues, replace `m`
+   * ca. 100 to 140 degrees, saturation half to full, any brightness
    */
-  cv::Mat filtered;
-  const double m = 255.0 / 2;
 
-  cv::Scalar min_b = cv::Scalar(180, m, m);
-  cv::Scalar max_b = cv::Scalar(270, m, m);
+  cv::Scalar min_b = cv::Scalar(100, 255 / 2, 0);
+  cv::Scalar max_b = cv::Scalar(140, 255, 255);
 
   cv::inRange(hsv, min_b, max_b, filtered);
 
