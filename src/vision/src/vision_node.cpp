@@ -1,20 +1,20 @@
 #include <cv_bridge/cv_bridge.h>
 #include <geometry_msgs/PointStamped.h>
-#include <opencv2/imgproc.hpp>
-#include <opencv2/opencv.hpp>
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
 #include <tf2_ros/transform_listener.h>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/opencv.hpp>
 
 // Publishers for Blue Square and Red Triangle
 ros::Publisher bs;
 ros::Publisher rt;
 
-void person_callback(const sensor_msgs::ImageConstPtr &img) {
+void person_callback(const sensor_msgs::ImageConstPtr& img) {
   cv_bridge::CvImagePtr cv_img_ptr;
   try {
     cv_img_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::BGR8);
-  } catch (cv_bridge::Exception &e) {
+  } catch (cv_bridge::Exception& e) {
     ROS_ERROR("cv_bridge exception: %s", e.what());
     return;
   }
@@ -65,7 +65,7 @@ void person_callback(const sensor_msgs::ImageConstPtr &img) {
   bs.publish(point);
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   ros::init(argc, argv, "vision_node");
 
   // TODO: create a seperate nodehandler and callback for red triangle
