@@ -5,10 +5,17 @@
 #include <tf2_ros/transform_listener.h>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/opencv.hpp>
+#include "opencv2/highgui.hpp"
+
+// Window name
+const std::string window = "Preview";
 
 // Publishers for Blue Square and Red Triangle
 ros::Publisher bs;
 ros::Publisher rt;
+
+// Keep track of the seen objects
+size_t objs;
 
 void person_callback(const sensor_msgs::ImageConstPtr& img) {
   cv_bridge::CvImagePtr cv_img_ptr;
@@ -18,8 +25,6 @@ void person_callback(const sensor_msgs::ImageConstPtr& img) {
     ROS_ERROR("cv_bridge exception: %s", e.what());
     return;
   }
-
-  ROS_INFO("Processing image...");
 
   /* RGB-Bild in HSV-Farbraum umändern:
    * https://docs.opencv.org/4.2.0/d8/d01/group__imgproc__color__conversions.html#gga4e0972be5de079fed4e3a10e24ef5ef0aa4a7f0ecf2e94150699e48c79139ee12
@@ -55,6 +60,19 @@ void person_callback(const sensor_msgs::ImageConstPtr& img) {
   cv::findContours(filtered, contours, cv::RETR_EXTERNAL,
                    cv::CHAIN_APPROX_SIMPLE);
 
+  if (contours.size() != objs && contours.size() > 0) {
+    ROS_INFO("Seeing %ld blue shape(s)!", contours.size());
+  }
+
+  objs = contours.size();
+
+  // opencv preview
+  cv::Mat preview;
+  cv::cvtColor(filtered, preview, cv::COLOR_GRAY2RGB);
+  cv::drawContours(preview, contours, -1, cv::Scalar(0, 255, 0), 2);
+  cv::imshow(window, preview);
+  cv::waitKey(1);
+
   // TODO: process output array to determine if shape requirements are met
 
   // TODO: determine position via tf2
@@ -67,9 +85,11 @@ void person_callback(const sensor_msgs::ImageConstPtr& img) {
 int main(int argc, char** argv) {
   ros::init(argc, argv, "vision_node");
 
+  cv::namedWindow(window);
+
   // TODO: create a seperate nodehandler and callback for red triangle
   ros::NodeHandle nh;
-  ros::Subscriber sub = nh.subscribe("/camera", 10, person_callback);
+  ros::Subscriber sub = nh.subscribe("/camera/image", 10, person_callback);
 
   bs = nh.advertise<geometry_msgs::PointStamped>("/blue_square_pos", 10);
   rt = nh.advertise<geometry_msgs::PointStamped>("/red_triangle_pos", 10);
