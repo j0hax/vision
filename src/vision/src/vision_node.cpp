@@ -67,8 +67,7 @@ void person_callback(const sensor_msgs::ImageConstPtr& img) {
   objs = contours.size();
 
   // opencv preview
-  cv::Mat preview;
-  cv::cvtColor(filtered, preview, cv::COLOR_GRAY2RGB);
+  cv::Mat preview = cv_img_ptr->image.clone();
   cv::drawContours(preview, contours, -1, cv::Scalar(0, 255, 0), 2);
   cv::imshow(window, preview);
   cv::waitKey(1);
