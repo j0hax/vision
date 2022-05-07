@@ -14,9 +14,6 @@ const std::string window = "Preview";
 ros::Publisher bs;
 ros::Publisher rt;
 
-// Keep track of the seen objects
-size_t objs;
-
 void person_callback(const sensor_msgs::ImageConstPtr& img) {
   cv_bridge::CvImagePtr cv_img_ptr;
   try {
@@ -26,24 +23,20 @@ void person_callback(const sensor_msgs::ImageConstPtr& img) {
     return;
   }
 
-  /* RGB-Bild in HSV-Farbraum umändern:
+  /*
+   * RGB-Bild in HSV-Farbraum umändern:
    * https://docs.opencv.org/4.2.0/d8/d01/group__imgproc__color__conversions.html#gga4e0972be5de079fed4e3a10e24ef5ef0aa4a7f0ecf2e94150699e48c79139ee12
    */
   cv::Mat hsv;
-
   cv::cvtColor(cv_img_ptr->image, hsv, cv::COLOR_BGR2HSV);
 
-  /* HSV-Bild nach Farbschwellenwert filtern:
-   * https://docs.opencv.org/4.2.0/da/d97/tutorial_threshold_inRange.html
-   */
-
-  cv::Mat filtered;
-
   /*
+   * HSV-Bild nach Farbschwellenwert filtern
    * Minimum and maximum hues for blue:
    * ca. 100 to 140 degrees, saturation half to full, any brightness
    */
 
+  cv::Mat filtered;
   cv::Scalar min_b = cv::Scalar(100, 255 / 2, 0);
   cv::Scalar max_b = cv::Scalar(140, 255, 255);
 
@@ -51,7 +44,6 @@ void person_callback(const sensor_msgs::ImageConstPtr& img) {
 
   /*
    * Search for contours in the binary image:
-   * https://docs.opencv.org/4.2.0/d3/dc0/group__imgproc__shape.html#gadf1ad6a0b82947fa1fe3c3d497f260e0
    * RETR_EXTERNAL = retrieves only the extreme outer contours.
    * CHAIN_APPROX_SIMPLE = compress into end points
    * TODO: decide if matchShapes() is a better alternative
@@ -60,19 +52,41 @@ void person_callback(const sensor_msgs::ImageConstPtr& img) {
   cv::findContours(filtered, contours, cv::RETR_EXTERNAL,
                    cv::CHAIN_APPROX_SIMPLE);
 
-  if (contours.size() != objs && contours.size() > 0) {
-    ROS_INFO("Seeing %ld blue shape(s)!", contours.size());
+  std::vector<std::vector<cv::Point>> quads;
+
+  // Filter out other crap data
+  for (const auto& shape : contours) {
+    double epsilon = 0.1 * cv::arcLength(shape, true);
+    std::vector<cv::Point> approx;
+    cv::approxPolyDP(shape, approx, epsilon, true);
+
+    // make sure the shape is a quadrilateral
+    if (approx.size() == 4) {
+      quads.push_back(approx);
+    }
   }
 
-  objs = contours.size();
-
-  // opencv preview
+  // BEGIN OpenCV Preview Code
   cv::Mat preview = cv_img_ptr->image.clone();
-  cv::drawContours(preview, contours, -1, cv::Scalar(0, 255, 0), 2);
+
+  cv::drawContours(preview, quads, 0, cv::Scalar(0, 255, 0));
+
+  for (const auto& shape : quads) {
+    // calculate moments to find center
+    cv::Moments m = cv::moments(shape);
+    cv::Point center = cv::Point(m.m10 / m.m00, m.m01 / m.m00);
+
+    cv::drawMarker(preview, center, cv::Scalar(0, 255, 0), cv::MARKER_STAR);
+
+    std::string text = std::to_string(shape.size()) + " points";
+    cv::Point tp = cv::Point(center.x, center.y - 50);
+    cv::putText(preview, text, tp, cv::FONT_HERSHEY_PLAIN, 1,
+                cv::Scalar(0, 255, 0), 1, cv::LINE_AA);
+  }
+
   cv::imshow(window, preview);
   cv::waitKey(1);
-
-  // TODO: process output array to determine if shape requirements are met
+  // END OpenCV Preview Code
 
   // TODO: determine position via tf2
 
