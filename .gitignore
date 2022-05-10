@@ -49,7 +49,3 @@ qtcreator-*
 
 # Catkin custom files
 CATKIN_IGNORE
-
-# Simulation files
-src/hwp_robot_description/
-src/hwp_simulation/
