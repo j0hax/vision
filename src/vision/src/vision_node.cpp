@@ -10,11 +10,93 @@
 // Window name
 const std::string window = "Preview";
 
+// Keep track of seen squares and triangles
+std::vector<std::vector<cv::Point>> shapes;
+
+// Draws an OpenCV Preview using a preview image and the list of objects
+void draw_preview(const cv::Mat& preview) {
+  // draw an outline
+  cv::drawContours(preview, shapes, 0, cv::Scalar(0, 255, 0));
+
+  // mark each of our shapes
+  for (const auto& shape : shapes) {
+    cv::Moments m = cv::moments(shape);
+
+    // mark center
+    cv::Point center = cv::Point(m.m10 / m.m00, m.m01 / m.m00);
+    cv::drawMarker(preview, center, cv::Scalar(0, 255, 0));
+
+    // show points
+    std::string text = std::to_string(shape.size()) + " points";
+    cv::Point tp = cv::Point(center.x, center.y - 50);
+    cv::putText(preview, text, tp, cv::FONT_HERSHEY_PLAIN, 1,
+                cv::Scalar(0, 255, 0), 1, cv::LINE_AA);
+  }
+  shapes.clear();
+  cv::imshow(window, preview);
+  cv::waitKey(1);
+}
+
+// Helper function to clean up contours and copy them to the shapes array
+void filter_copy_shape(const std::vector<std::vector<cv::Point>>& contours,
+                       const int& sides,
+                       std::vector<std::vector<cv::Point>>& shapes) {
+  for (const auto& shape : contours) {
+    double epsilon = 0.1 * cv::arcLength(shape, true);
+    std::vector<cv::Point> approx;
+    cv::approxPolyDP(shape, approx, epsilon, true);
+
+    // make sure the shape is of the specified type
+    if (approx.size() == sides) {
+      shapes.push_back(approx);
+    }
+  }
+}
+
 // Publishers for Blue Square and Red Triangle
 ros::Publisher bs;
 ros::Publisher rt;
 
-void person_callback(const sensor_msgs::ImageConstPtr& img) {
+void find_persons(cv::Mat& hsv) {
+  // filter blue-ish colors
+  cv::Mat filtered;
+  cv::Scalar min_b = cv::Scalar(210 / 2, 255 / 2, 0);
+  cv::Scalar max_b = cv::Scalar(255 / 2, 255, 255);
+  cv::inRange(hsv, min_b, max_b, filtered);
+
+  // Track our Contours
+  std::vector<std::vector<cv::Point>> contours;
+  cv::findContours(filtered, contours, cv::RETR_EXTERNAL,
+                   cv::CHAIN_APPROX_SIMPLE);
+
+  // Filter out other crap data
+  filter_copy_shape(contours, 4, shapes);
+
+  geometry_msgs::PointStamped point;
+  rt.publish(point);
+}
+
+void find_fires(cv::Mat& hsv) {
+  // filter red-ish colors
+  cv::Mat filtered;
+  cv::Scalar min_b = cv::Scalar(0 / 2, 255 / 2, 0);
+  cv::Scalar max_b = cv::Scalar(15 / 2, 255, 255);
+  cv::inRange(hsv, min_b, max_b, filtered);
+
+  // Track our Contours
+  std::vector<std::vector<cv::Point>> contours;
+  cv::findContours(filtered, contours, cv::RETR_EXTERNAL,
+                   cv::CHAIN_APPROX_SIMPLE);
+
+  // Filter out other crap data
+  filter_copy_shape(contours, 3, shapes);
+
+  geometry_msgs::PointStamped point;
+  rt.publish(point);
+}
+
+// Just a dumb old function to check the camera and draw a preview
+void image_callback(const sensor_msgs::ImageConstPtr& img) {
   cv_bridge::CvImagePtr cv_img_ptr;
   try {
     cv_img_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::BGR8);
@@ -23,76 +105,13 @@ void person_callback(const sensor_msgs::ImageConstPtr& img) {
     return;
   }
 
-  /*
-   * RGB-Bild in HSV-Farbraum umändern:
-   * https://docs.opencv.org/4.2.0/d8/d01/group__imgproc__color__conversions.html#gga4e0972be5de079fed4e3a10e24ef5ef0aa4a7f0ecf2e94150699e48c79139ee12
-   */
   cv::Mat hsv;
   cv::cvtColor(cv_img_ptr->image, hsv, cv::COLOR_BGR2HSV);
 
-  /*
-   * HSV-Bild nach Farbschwellenwert filtern
-   * Minimum and maximum hues for blue:
-   * ca. 100 to 140 degrees, saturation half to full, any brightness
-   */
+  find_persons(hsv);
+  find_fires(hsv);
 
-  cv::Mat filtered;
-  cv::Scalar min_b = cv::Scalar(100, 255 / 2, 0);
-  cv::Scalar max_b = cv::Scalar(140, 255, 255);
-
-  cv::inRange(hsv, min_b, max_b, filtered);
-
-  /*
-   * Search for contours in the binary image:
-   * RETR_EXTERNAL = retrieves only the extreme outer contours.
-   * CHAIN_APPROX_SIMPLE = compress into end points
-   * TODO: decide if matchShapes() is a better alternative
-   */
-  std::vector<std::vector<cv::Point>> contours;
-  cv::findContours(filtered, contours, cv::RETR_EXTERNAL,
-                   cv::CHAIN_APPROX_SIMPLE);
-
-  std::vector<std::vector<cv::Point>> quads;
-
-  // Filter out other crap data
-  for (const auto& shape : contours) {
-    double epsilon = 0.1 * cv::arcLength(shape, true);
-    std::vector<cv::Point> approx;
-    cv::approxPolyDP(shape, approx, epsilon, true);
-
-    // make sure the shape is a quadrilateral
-    if (approx.size() == 4) {
-      quads.push_back(approx);
-    }
-  }
-
-  // BEGIN OpenCV Preview Code
-  cv::Mat preview = cv_img_ptr->image.clone();
-
-  cv::drawContours(preview, quads, 0, cv::Scalar(0, 255, 0));
-
-  for (const auto& shape : quads) {
-    // calculate moments to find center
-    cv::Moments m = cv::moments(shape);
-    cv::Point center = cv::Point(m.m10 / m.m00, m.m01 / m.m00);
-
-    cv::drawMarker(preview, center, cv::Scalar(0, 255, 0), cv::MARKER_STAR);
-
-    std::string text = std::to_string(shape.size()) + " points";
-    cv::Point tp = cv::Point(center.x, center.y - 50);
-    cv::putText(preview, text, tp, cv::FONT_HERSHEY_PLAIN, 1,
-                cv::Scalar(0, 255, 0), 1, cv::LINE_AA);
-  }
-
-  cv::imshow(window, preview);
-  cv::waitKey(1);
-  // END OpenCV Preview Code
-
-  // TODO: determine position via tf2
-
-  geometry_msgs::PointStamped point;
-
-  bs.publish(point);
+  draw_preview(cv_img_ptr->image);
 }
 
 int main(int argc, char** argv) {
@@ -100,9 +119,9 @@ int main(int argc, char** argv) {
 
   cv::namedWindow(window);
 
-  // TODO: create a seperate nodehandler and callback for red triangle
   ros::NodeHandle nh;
-  ros::Subscriber sub = nh.subscribe("/camera/image", 10, person_callback);
+
+  ros::Subscriber s = nh.subscribe("/camera/image", 10, image_callback);
 
   bs = nh.advertise<geometry_msgs::PointStamped>("/blue_square_pos", 10);
   rt = nh.advertise<geometry_msgs::PointStamped>("/red_triangle_pos", 10);
