@@ -4,3 +4,9 @@
 [submodule "src/hwp_robot_description"]
 	path = src/hwp_robot_description
 	url = https://ws02.rts.uni-hannover.de/hwp_turtlebots/hwp_robot_description.git
+[submodule "src/hwp_navigation"]
+	path = src/hwp_navigation
+	url = https://ws02.rts.uni-hannover.de/hwp_turtlebots/hwp_navigation.git
+[submodule "src/hwp_costmaps"]
+	path = src/hwp_costmaps
+	url = https://ws02.rts.uni-hannover.de/hwp_turtlebots/hwp_costmaps.git

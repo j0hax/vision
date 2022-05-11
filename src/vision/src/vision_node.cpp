@@ -2,10 +2,13 @@
 #include <geometry_msgs/PointStamped.h>
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
+#include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/opencv.hpp>
 #include "opencv2/highgui.hpp"
+
+tf2_ros::Buffer tfBuffer;
 
 // Window name
 const std::string window = "Preview";
@@ -111,6 +114,18 @@ void image_callback(const sensor_msgs::ImageConstPtr& img) {
   find_persons(hsv);
   find_fires(hsv);
 
+  // localization test
+  if (shapes.size() > 0) {
+    try {
+      geometry_msgs::TransformStamped loc =
+          tfBuffer.lookupTransform("odom", "base_link", ros::Time::now());
+      ROS_INFO("Have marker at [%f, %f]", loc.transform.translation.x,
+               loc.transform.translation.y);
+    } catch (const tf2::ExtrapolationException& e) {
+      ROS_ERROR("Error: %s", e.what());
+    }
+  }
+
   draw_preview(cv_img_ptr->image);
 }
 
@@ -121,10 +136,14 @@ int main(int argc, char** argv) {
 
   ros::NodeHandle nh;
 
+  tf2_ros::TransformListener tfListener(tfBuffer);
+
   ros::Subscriber s = nh.subscribe("/camera/image", 10, image_callback);
 
   bs = nh.advertise<geometry_msgs::PointStamped>("/blue_square_pos", 10);
   rt = nh.advertise<geometry_msgs::PointStamped>("/red_triangle_pos", 10);
+
+  ROS_INFO("Vision node has finished initializing!");
 
   ros::spin();
 }
