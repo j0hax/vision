@@ -118,7 +118,7 @@ void image_callback(const sensor_msgs::ImageConstPtr& img) {
   if (shapes.size() > 0) {
     try {
       geometry_msgs::TransformStamped loc =
-          tfBuffer.lookupTransform("odom", "base_link", ros::Time::now());
+          tfBuffer.lookupTransform("odom", "base_link", ros::Time(0));
       ROS_INFO("Have marker at [%f, %f]", loc.transform.translation.x,
                loc.transform.translation.y);
     } catch (const tf2::ExtrapolationException& e) {
