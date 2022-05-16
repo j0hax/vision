@@ -5,17 +5,21 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 #include <cstdlib>
+#include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/opencv.hpp>
-#include <opencv2/highgui.hpp>
 
 tf2_ros::Buffer tfBuffer;
 
 // Window name
 const std::string window = "Preview";
 
-// Keep track of seen squares and triangles
+// Contour list, used for previews
 std::vector<std::vector<cv::Point>> shapes;
+
+// Keep track of the exact points
+std::vector<geometry_msgs::PointStamped> fires;
+std::vector<geometry_msgs::PointStamped> persons;
 
 // Draws an OpenCV Preview using a preview image and the list of objects
 void draw_preview(const cv::Mat& preview) {
@@ -44,8 +48,8 @@ void draw_preview(const cv::Mat& preview) {
 // Helper function to check if a point is already within another points' 3D
 // radius
 bool in_radius(const geometry_msgs::PointStamped point,
-               const std::vector<geometry_msgs::PointStamped>& points, const double R = 0.5) {
-
+               const std::vector<geometry_msgs::PointStamped>& points,
+               const double R = 0.5) {
   // grab coords
   double x = point.point.x;
   double y = point.point.y;
