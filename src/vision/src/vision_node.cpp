@@ -4,6 +4,7 @@
 #include <sensor_msgs/Image.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
+#include <cstdlib>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/opencv.hpp>
 #include <opencv2/highgui.hpp>
@@ -38,6 +39,29 @@ void draw_preview(const cv::Mat& preview) {
   shapes.clear();
   cv::imshow(window, preview);
   cv::waitKey(1);
+}
+
+// Helper function to check if a point is already within another points' 3D
+// radius
+bool in_radius(const geometry_msgs::PointStamped point,
+               const std::vector<geometry_msgs::PointStamped>& points, const double R = 0.5) {
+
+  // grab coords
+  double x = point.point.x;
+  double y = point.point.y;
+  double z = point.point.z;
+
+  for (const auto& known : points) {
+    if (abs(x - known.point.x) > R)
+      return false;
+    if (abs(y - known.point.y) > R)
+      return false;
+    if (abs(z - known.point.z) > R)
+      return false;
+  }
+
+  // It appears the point is not in the list
+  return true;
 }
 
 // Helper function to clean up contours and copy them to the shapes array
