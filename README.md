@@ -11,6 +11,9 @@ Dieses ROS Modul dient dazu, mittels [OpenCV](https://opencv.org/) in einem Geb�
 
 Die erforderlichen Simulationsdateien sind als Git-Submodul eingerichtet.
 
+Eventuell müssen noch `ros-noetic-amcl` und `ros-noetic-move-base` installiert werden, um die Musterlösungen auszuführen.
+
+
 ## Bauen & Ausführen
 
 1. `catkin_make`
