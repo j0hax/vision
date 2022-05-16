@@ -6,7 +6,7 @@
 #include <tf2_ros/transform_listener.h>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/opencv.hpp>
-#include "opencv2/highgui.hpp"
+#include <opencv2/highgui.hpp>
 
 tf2_ros::Buffer tfBuffer;
 
