@@ -166,7 +166,7 @@ int main(int argc, char** argv) {
 
   tf2_ros::TransformListener tfListener(tfBuffer);
 
-  ros::Subscriber s = nh.subscribe("/camera/image", 10, image_callback);
+  ros::Subscriber s = nh.subscribe("/camera/image", 1, image_callback);
 
   bs = nh.advertise<geometry_msgs::PointStamped>("/blue_square_pos", 10);
   rt = nh.advertise<geometry_msgs::PointStamped>("/red_triangle_pos", 10);
