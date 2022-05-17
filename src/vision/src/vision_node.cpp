@@ -49,23 +49,28 @@ void draw_preview(const cv::Mat& preview) {
 // radius
 bool in_radius(const geometry_msgs::PointStamped point,
                const std::vector<geometry_msgs::PointStamped>& points,
-               const double R = 0.5) {
+               const double R = 1) {
   // grab coords
   double x = point.point.x;
   double y = point.point.y;
   double z = point.point.z;
 
-  for (const auto& known : points) {
-    if (abs(x - known.point.x) > R)
-      return false;
-    if (abs(y - known.point.y) > R)
-      return false;
-    if (abs(z - known.point.z) > R)
-      return false;
+  // measure distance to every other point in list
+  for (const auto& p : points) {
+    double dx = std::pow(x - p.point.x, 2);
+    double dy = std::pow(y - p.point.y, 2);
+    double dz = std::pow(z - p.point.z, 2);
+
+    double distance = std::sqrt(dx + dy + dz);
+
+    // check if the distance is in the radius
+    if (distance <= R) {
+      return true;
+    }
   }
 
   // It appears the point is not in the list
-  return true;
+  return false;
 }
 
 // Helper function to clean up contours and copy them to the shapes array
