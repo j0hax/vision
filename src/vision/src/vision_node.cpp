@@ -2,12 +2,16 @@
 #include <geometry_msgs/PointStamped.h>
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
+#include <sensor_msgs/LaserScan.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 #include <cstdlib>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/opencv.hpp>
+
+// Raspberry Pi Camera FOV
+const int fov = 62;
 
 tf2_ros::Buffer tfBuffer;
 
@@ -93,6 +97,25 @@ void filter_copy_shape(const std::vector<std::vector<cv::Point>>& contours,
   }
 }
 
+// Clean up detected contours, filter by number of edges and compute their
+// center points
+void filter_copy_point(const std::vector<std::vector<cv::Point>>& contours,
+                       const int& sides,
+                       std::vector<cv::Point>& points) {
+  for (const auto& shape : contours) {
+    const double epsilon = 0.1 * cv::arcLength(shape, true);
+    std::vector<cv::Point> approx;
+    cv::approxPolyDP(shape, approx, epsilon, true);
+
+    // make sure the shape is of the specified type
+    if (approx.size() == sides) {
+      const cv::Moments m = cv::moments(approx);
+      const cv::Point center = cv::Point(m.m10 / m.m00, m.m01 / m.m00);
+      points.push_back(center);
+    }
+  }
+}
+
 // Publishers for Blue Square and Red Triangle
 ros::Publisher bs;
 ros::Publisher rt;
@@ -112,8 +135,57 @@ void find_persons(cv::Mat& hsv) {
   // Filter out other crap data
   filter_copy_shape(contours, 4, shapes);
 
-  geometry_msgs::PointStamped point;
-  rt.publish(point);
+  // Determine position of candidate shapes
+  std::vector<cv::Point> points;
+  filter_copy_point(contours, 4, points);
+
+  for (const auto& point : points) {
+    // Calculate deviation from center (-50 to 50%)
+    float relative = (point.x - hsv.cols / 2) / (float)(hsv.cols);
+
+    // First check: skip if sign is in the fringes of view (these tend to be
+    // innacurate)
+    if (relative > 0.333 || relative < -0.333) {
+      continue;
+    }
+
+    // Use our knowledge of the FOV to determine approximate angle of sign
+    float rel_angle = relative * fov;
+    int angle = (360 + (int)rel_angle) % 360;
+    float r_angle = angle * (M_PI / 180);
+
+    float dist = 0;
+    try {
+      dist = current_scan.ranges.at(angle);
+    } catch (const std::out_of_range& e) {
+      ROS_WARN("Laser Scan index %i was out of range", angle);
+      continue;
+    }
+
+    // Second check: skip if the sign is too far away
+    if (dist > 1) {
+      continue;
+    }
+
+    // Calculate position of sign
+    try {
+      geometry_msgs::TransformStamped loc = tfBuffer.lookupTransform(
+          "odom", "camera_link", ros::Time(0), ros::Duration(1));
+
+      geometry_msgs::PointStamped point;
+      point.point.x = loc.transform.translation.x + dist * std::sin(r_angle);
+      point.point.y = loc.transform.translation.y + dist * std::cos(r_angle);
+
+      if (!in_radius(point, persons)) {
+        ROS_INFO("Found point at (%f, %f)!", point.point.x, point.point.y);
+        bs.publish(point);
+        persons.push_back(point);
+      }
+
+    } catch (const tf2::ExtrapolationException& e) {
+      ROS_ERROR("Error: %s", e.what());
+    }
+  }
 }
 
 void find_fires(cv::Mat& hsv) {
@@ -130,6 +202,8 @@ void find_fires(cv::Mat& hsv) {
 
   // Filter out other crap data
   filter_copy_shape(contours, 3, shapes);
+
+  // TODO: same as for persons
 
   geometry_msgs::PointStamped point;
   rt.publish(point);
@@ -151,17 +225,8 @@ void image_callback(const sensor_msgs::ImageConstPtr& img) {
   find_persons(hsv);
   find_fires(hsv);
 
-  // localization test
-  if (shapes.size() > 0) {
-    try {
-      geometry_msgs::TransformStamped loc =
-          tfBuffer.lookupTransform("odom", "base_link", ros::Time(0));
-      ROS_INFO("Have marker at [%f, %f]", loc.transform.translation.x,
-               loc.transform.translation.y);
-    } catch (const tf2::ExtrapolationException& e) {
-      ROS_ERROR("Error: %s", e.what());
-    }
-  }
+  draw_preview(cv_img_ptr->image);
+}
 
 void scan_callback(const sensor_msgs::LaserScan& scn) {
   current_scan = scn;
@@ -179,8 +244,8 @@ int main(int argc, char** argv) {
   ros::Subscriber s = nh.subscribe("/camera/image", 1, image_callback);
   ros::Subscriber l = nh.subscribe("/scan", 1, scan_callback);
 
-  bs = nh.advertise<geometry_msgs::PointStamped>("/blue_square_pos", 10);
-  rt = nh.advertise<geometry_msgs::PointStamped>("/red_triangle_pos", 10);
+  bs = nh.advertise<geometry_msgs::PointStamped>("/blue_square_pos", 1);
+  rt = nh.advertise<geometry_msgs::PointStamped>("/red_triangle_pos", 1);
 
   ROS_INFO("Vision node has finished initializing!");
 
