@@ -14,6 +14,10 @@ tf2_ros::Buffer tfBuffer;
 // Window name
 const std::string window = "Preview";
 
+// Keep track of laser scan
+// std::vector<float> laser_scan;
+sensor_msgs::LaserScan current_scan;
+
 // Contour list, used for previews
 std::vector<std::vector<cv::Point>> shapes;
 
@@ -159,7 +163,8 @@ void image_callback(const sensor_msgs::ImageConstPtr& img) {
     }
   }
 
-  draw_preview(cv_img_ptr->image);
+void scan_callback(const sensor_msgs::LaserScan& scn) {
+  current_scan = scn;
 }
 
 int main(int argc, char** argv) {
@@ -172,6 +177,7 @@ int main(int argc, char** argv) {
   tf2_ros::TransformListener tfListener(tfBuffer);
 
   ros::Subscriber s = nh.subscribe("/camera/image", 1, image_callback);
+  ros::Subscriber l = nh.subscribe("/scan", 1, scan_callback);
 
   bs = nh.advertise<geometry_msgs::PointStamped>("/blue_square_pos", 10);
   rt = nh.advertise<geometry_msgs::PointStamped>("/red_triangle_pos", 10);
