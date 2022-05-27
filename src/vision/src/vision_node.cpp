@@ -1,5 +1,8 @@
 #include <cv_bridge/cv_bridge.h>
 #include <geometry_msgs/PointStamped.h>
+#include <message_filters/subscriber.h>
+#include <message_filters/sync_policies/approximate_time.h>
+#include <message_filters/time_synchronizer.h>
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/LaserScan.h>
@@ -124,7 +127,9 @@ ros::Publisher bs;
 ros::Publisher rt;
 ros::Publisher vm;
 
-void find_persons(const cv::Mat& hsv, const std_msgs::Header& imghdr) {
+void find_persons(const cv::Mat& hsv,
+                  const std_msgs::Header& imghdr,
+                  const sensor_msgs::LaserScan::ConstPtr& scn) {
   static int id = 0;
 
   // filter blue-ish colors
@@ -170,7 +175,7 @@ void find_persons(const cv::Mat& hsv, const std_msgs::Header& imghdr) {
 
     float dist = 0;
     try {
-      dist = current_scan.ranges.at(angle);
+      dist = (*scn).ranges.at(angle);
     } catch (const std::out_of_range& e) {
       ROS_WARN("Laser Scan index %i was out of range", angle);
       continue;
@@ -184,7 +189,7 @@ void find_persons(const cv::Mat& hsv, const std_msgs::Header& imghdr) {
     // Calculate position of sign
     try {
       geometry_msgs::TransformStamped loc = tfBuffer.lookupTransform(
-          "map", imghdr.frame_id, imghdr.stamp, ros::Duration(1));
+          "map", imghdr.frame_id, imghdr.stamp, ros::Duration(10));
 
       geometry_msgs::PointStamped point;
 
@@ -259,7 +264,8 @@ void find_fires(cv::Mat& hsv) {
 }
 
 // Just a dumb old function to check the camera and draw a preview
-void image_callback(const sensor_msgs::ImageConstPtr& img) {
+void callback(const sensor_msgs::Image::ConstPtr& img,
+              const sensor_msgs::LaserScan::ConstPtr& scn) {
   cv_bridge::CvImagePtr cv_img_ptr;
   try {
     cv_img_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::BGR8);
@@ -271,14 +277,10 @@ void image_callback(const sensor_msgs::ImageConstPtr& img) {
   cv::Mat hsv;
   cv::cvtColor(cv_img_ptr->image, hsv, cv::COLOR_BGR2HSV);
 
-  find_persons(hsv, img->header);
+  find_persons(hsv, img->header, scn);
   // find_fires(hsv, img->header);
 
   // draw_preview(cv_img_ptr->image);
-}
-
-void scan_callback(const sensor_msgs::LaserScan& scn) {
-  current_scan = scn;
 }
 
 int main(int argc, char** argv) {
@@ -290,8 +292,17 @@ int main(int argc, char** argv) {
 
   tf2_ros::TransformListener tfListener(tfBuffer);
 
-  ros::Subscriber s = nh.subscribe("/camera/image", 1, image_callback);
-  ros::Subscriber l = nh.subscribe("/scan", 1, scan_callback);
+  message_filters::Subscriber<sensor_msgs::Image> image_sub(nh, "/camera/image",
+                                                            1);
+  message_filters::Subscriber<sensor_msgs::LaserScan> scan_sub(nh, "/scan", 1);
+
+  typedef message_filters::sync_policies::ApproximateTime<
+      sensor_msgs::Image, sensor_msgs::LaserScan>
+      ap;
+
+  message_filters::Synchronizer<ap> sync(ap(10), image_sub, scan_sub);
+
+  sync.registerCallback(boost::bind(&callback, _1, _2));
 
   bs = nh.advertise<geometry_msgs::PointStamped>("/blue_square_pos", 1);
   rt = nh.advertise<geometry_msgs::PointStamped>("/red_triangle_pos", 1);
