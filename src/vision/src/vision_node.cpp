@@ -3,8 +3,11 @@
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/LaserScan.h>
+#include <std_msgs/Header.h>
+#include <tf2/utils.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
+#include <visualization_msgs/Marker.h>
 #include <cstdlib>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
@@ -116,11 +119,14 @@ void filter_copy_point(const std::vector<std::vector<cv::Point>>& contours,
   }
 }
 
-// Publishers for Blue Square and Red Triangle
+// Publishers for Blue Square, Red Triangle and Vis Marker
 ros::Publisher bs;
 ros::Publisher rt;
+ros::Publisher vm;
 
-void find_persons(cv::Mat& hsv) {
+void find_persons(const cv::Mat& hsv, const std_msgs::Header& imghdr) {
+  static int id = 0;
+
   // filter blue-ish colors
   cv::Mat filtered;
   cv::Scalar min_b = cv::Scalar(210 / 2, 255 / 2, 0);
@@ -149,10 +155,18 @@ void find_persons(cv::Mat& hsv) {
       continue;
     }
 
-    // Use our knowledge of the FOV to determine approximate angle of sign
+    /*
+      Use our knowledge of the FOV to determine approximate angle of sign
+    */
+
+    // relative angle from camera center at 0°
     float rel_angle = relative * fov;
+
+    // absolute angle from camera center at 0°
     int angle = (360 + (int)rel_angle) % 360;
-    float r_angle = angle * (M_PI / 180);
+
+    // convert relative angle to radians (TODO: use rel or abs angle??)
+    float rad = rel_angle * (M_PI / 180.0);
 
     float dist = 0;
     try {
@@ -170,17 +184,52 @@ void find_persons(cv::Mat& hsv) {
     // Calculate position of sign
     try {
       geometry_msgs::TransformStamped loc = tfBuffer.lookupTransform(
-          "odom", "camera_link", ros::Time(0), ros::Duration(1));
+          "map", imghdr.frame_id, imghdr.stamp, ros::Duration(1));
 
       geometry_msgs::PointStamped point;
-      point.point.x = loc.transform.translation.x + dist * std::sin(r_angle);
-      point.point.y = loc.transform.translation.y + dist * std::cos(r_angle);
 
-      if (!in_radius(point, persons)) {
-        ROS_INFO("Found point at (%f, %f)!", point.point.x, point.point.y);
-        bs.publish(point);
-        persons.push_back(point);
+      point.header.frame_id = "map";
+      point.header.stamp = ros::Time::now();
+
+      // To calculate the absolute position of the sign, we need the relative
+      // rotation of the robot
+      double yaw = tf2::getYaw(loc.transform.rotation);
+
+      double theta = yaw - rad;
+
+      point.point.x = loc.transform.translation.x + (dist * std::cos(theta));
+      point.point.y = loc.transform.translation.y + (dist * std::sin(theta));
+
+      if (in_radius(point, persons)) {
+        continue;
       }
+
+      // add our marker
+      visualization_msgs::Marker marker;
+      marker.header.frame_id = "map";
+      marker.header.stamp = ros::Time::now();
+      marker.ns = "vision";
+      marker.id = ++id;
+      marker.type = visualization_msgs::Marker::CUBE;
+      marker.action = visualization_msgs::Marker::ADD;
+      marker.pose.position.x = point.point.x;
+      marker.pose.position.y = point.point.y;
+      marker.pose.position.z = 0;
+      marker.pose.orientation.x = 0.0;
+      marker.pose.orientation.y = 0.0;
+      marker.pose.orientation.z = 0.0;
+      marker.pose.orientation.w = 1.0;
+      marker.scale.x = 0.1;
+      marker.scale.y = 0.1;
+      marker.scale.z = 0.1;
+      marker.color.a = 1.0;
+      marker.color.r = 0.0;
+      marker.color.g = 0.0;
+      marker.color.b = 1.0;
+      vm.publish(marker);
+
+      bs.publish(point);
+      persons.push_back(point);
 
     } catch (const tf2::ExtrapolationException& e) {
       ROS_ERROR("Error: %s", e.what());
@@ -222,10 +271,10 @@ void image_callback(const sensor_msgs::ImageConstPtr& img) {
   cv::Mat hsv;
   cv::cvtColor(cv_img_ptr->image, hsv, cv::COLOR_BGR2HSV);
 
-  find_persons(hsv);
-  find_fires(hsv);
+  find_persons(hsv, img->header);
+  // find_fires(hsv, img->header);
 
-  draw_preview(cv_img_ptr->image);
+  // draw_preview(cv_img_ptr->image);
 }
 
 void scan_callback(const sensor_msgs::LaserScan& scn) {
@@ -246,6 +295,8 @@ int main(int argc, char** argv) {
 
   bs = nh.advertise<geometry_msgs::PointStamped>("/blue_square_pos", 1);
   rt = nh.advertise<geometry_msgs::PointStamped>("/red_triangle_pos", 1);
+
+  vm = nh.advertise<visualization_msgs::Marker>("visualization_marker", 0);
 
   ROS_INFO("Vision node has finished initializing!");
 
