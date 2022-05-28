@@ -11,13 +11,16 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 #include <visualization_msgs/Marker.h>
-#include <cstdlib>
+#include <cmath>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/opencv.hpp>
 
 // Raspberry Pi Camera FOV
 const int fov = 62;
+
+// Inner limit of a sign on a frame: rule of thirds
+const double lim = 1 / 3.0;
 
 tf2_ros::Buffer tfBuffer;
 
@@ -154,9 +157,8 @@ void find_persons(const cv::Mat& hsv,
     // Calculate deviation from center (-50 to 50%)
     float relative = (point.x - hsv.cols / 2) / (float)(hsv.cols);
 
-    // First check: skip if sign is in the fringes of view (these tend to be
-    // innacurate)
-    if (relative > 0.333 || relative < -0.333) {
+    // First check: skip if sign is outside of the middle limit
+    if (std::abs(relative) > lim) {
       continue;
     }
 
@@ -189,7 +191,7 @@ void find_persons(const cv::Mat& hsv,
     // Calculate position of sign
     try {
       geometry_msgs::TransformStamped loc = tfBuffer.lookupTransform(
-          "map", imghdr.frame_id, imghdr.stamp, ros::Duration(10));
+          "map", imghdr.frame_id, imghdr.stamp, ros::Duration(1));
 
       geometry_msgs::PointStamped point;
 
