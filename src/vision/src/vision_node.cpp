@@ -24,43 +24,9 @@ const double lim = 1 / 3.0;
 
 tf2_ros::Buffer tfBuffer;
 
-// Window name
-const std::string window = "Preview";
-
-// Keep track of laser scan
-// std::vector<float> laser_scan;
-sensor_msgs::LaserScan current_scan;
-
-// Contour list, used for previews
-std::vector<std::vector<cv::Point>> shapes;
-
 // Keep track of the exact points
 std::vector<geometry_msgs::PointStamped> fires;
 std::vector<geometry_msgs::PointStamped> persons;
-
-// Draws an OpenCV Preview using a preview image and the list of objects
-void draw_preview(const cv::Mat& preview) {
-  // draw an outline
-  cv::drawContours(preview, shapes, 0, cv::Scalar(0, 255, 0));
-
-  // mark each of our shapes
-  for (const auto& shape : shapes) {
-    cv::Moments m = cv::moments(shape);
-
-    // mark center
-    cv::Point center = cv::Point(m.m10 / m.m00, m.m01 / m.m00);
-    cv::drawMarker(preview, center, cv::Scalar(0, 255, 0));
-
-    // show points
-    std::string text = std::to_string(shape.size()) + " points";
-    cv::Point tp = cv::Point(center.x, center.y - 50);
-    cv::putText(preview, text, tp, cv::FONT_HERSHEY_PLAIN, 1,
-                cv::Scalar(0, 255, 0), 1, cv::LINE_AA);
-  }
-  shapes.clear();
-  cv::imshow(window, preview);
-  cv::waitKey(1);
-}
 
 // Helper function to check if a point is already within another points' 3D
 // radius
@@ -88,22 +54,6 @@ bool in_radius(const geometry_msgs::PointStamped point,
 
   // It appears the point is not in the list
   return false;
-}
-
-// Helper function to clean up contours and copy them to the shapes array
-void filter_copy_shape(const std::vector<std::vector<cv::Point>>& contours,
-                       const int& sides,
-                       std::vector<std::vector<cv::Point>>& shapes) {
-  for (const auto& shape : contours) {
-    double epsilon = 0.1 * cv::arcLength(shape, true);
-    std::vector<cv::Point> approx;
-    cv::approxPolyDP(shape, approx, epsilon, true);
-
-    // make sure the shape is of the specified type
-    if (approx.size() == sides) {
-      shapes.push_back(approx);
-    }
-  }
 }
 
 // Clean up detected contours, filter by number of edges and compute their
@@ -145,9 +95,6 @@ void find_persons(const cv::Mat& hsv,
   std::vector<std::vector<cv::Point>> contours;
   cv::findContours(filtered, contours, cv::RETR_EXTERNAL,
                    cv::CHAIN_APPROX_SIMPLE);
-
-  // Filter out other crap data
-  filter_copy_shape(contours, 4, shapes);
 
   // Determine position of candidate shapes
   std::vector<cv::Point> points;
@@ -256,9 +203,6 @@ void find_fires(cv::Mat& hsv) {
   cv::findContours(filtered, contours, cv::RETR_EXTERNAL,
                    cv::CHAIN_APPROX_SIMPLE);
 
-  // Filter out other crap data
-  filter_copy_shape(contours, 3, shapes);
-
   // TODO: same as for persons
 
   geometry_msgs::PointStamped point;
@@ -287,8 +231,6 @@ void callback(const sensor_msgs::Image::ConstPtr& img,
 
 int main(int argc, char** argv) {
   ros::init(argc, argv, "vision_node");
-
-  cv::namedWindow(window);
 
   ros::NodeHandle nh;
 
