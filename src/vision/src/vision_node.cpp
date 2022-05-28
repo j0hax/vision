@@ -75,30 +75,12 @@ void filter_copy_point(const std::vector<std::vector<cv::Point>>& contours,
   }
 }
 
-// Publishers for Blue Square, Red Triangle and Vis Marker
-ros::Publisher bs;
-ros::Publisher rt;
-ros::Publisher vm;
-
-void find_persons(const cv::Mat& hsv,
-                  const std_msgs::Header& imghdr,
-                  const sensor_msgs::LaserScan::ConstPtr& scn) {
-  static int id = 0;
-
-  // filter blue-ish colors
-  cv::Mat filtered;
-  cv::Scalar min_b = cv::Scalar(210 / 2, 255 / 2, 0);
-  cv::Scalar max_b = cv::Scalar(255 / 2, 255, 255);
-  cv::inRange(hsv, min_b, max_b, filtered);
-
-  // Track our Contours
-  std::vector<std::vector<cv::Point>> contours;
-  cv::findContours(filtered, contours, cv::RETR_EXTERNAL,
-                   cv::CHAIN_APPROX_SIMPLE);
-
-  // Determine position of candidate shapes
-  std::vector<cv::Point> points;
-  filter_copy_point(contours, 4, points);
+std::vector<geometry_msgs::PointStamped> localize_publish_point(
+    const cv::Mat& hsv,
+    const std_msgs::Header& imghdr,
+    const sensor_msgs::LaserScan::ConstPtr& scn,
+    const std::vector<cv::Point>& points) {
+  std::vector<geometry_msgs::PointStamped> output;
 
   for (const auto& point : points) {
     // Calculate deviation from center (-50 to 50%)
@@ -140,10 +122,10 @@ void find_persons(const cv::Mat& hsv,
       geometry_msgs::TransformStamped loc = tfBuffer.lookupTransform(
           "map", imghdr.frame_id, imghdr.stamp, ros::Duration(1));
 
-      geometry_msgs::PointStamped point;
+      geometry_msgs::PointStamped ps;
 
-      point.header.frame_id = "map";
-      point.header.stamp = ros::Time::now();
+      ps.header.frame_id = "map";
+      ps.header.stamp = ros::Time::now();
 
       // To calculate the absolute position of the sign, we need the relative
       // rotation of the robot
@@ -151,47 +133,87 @@ void find_persons(const cv::Mat& hsv,
 
       double theta = yaw - rad;
 
-      point.point.x = loc.transform.translation.x + (dist * std::cos(theta));
-      point.point.y = loc.transform.translation.y + (dist * std::sin(theta));
+      ps.point.x = loc.transform.translation.x + (dist * std::cos(theta));
+      ps.point.y = loc.transform.translation.y + (dist * std::sin(theta));
 
-      if (in_radius(point, persons)) {
-        continue;
-      }
-
-      // add our marker
-      visualization_msgs::Marker marker;
-      marker.header.frame_id = "map";
-      marker.header.stamp = ros::Time::now();
-      marker.ns = "vision";
-      marker.id = ++id;
-      marker.type = visualization_msgs::Marker::CUBE;
-      marker.action = visualization_msgs::Marker::ADD;
-      marker.pose.position.x = point.point.x;
-      marker.pose.position.y = point.point.y;
-      marker.pose.position.z = 0;
-      marker.pose.orientation.x = 0.0;
-      marker.pose.orientation.y = 0.0;
-      marker.pose.orientation.z = 0.0;
-      marker.pose.orientation.w = 1.0;
-      marker.scale.x = 0.1;
-      marker.scale.y = 0.1;
-      marker.scale.z = 0.1;
-      marker.color.a = 1.0;
-      marker.color.r = 0.0;
-      marker.color.g = 0.0;
-      marker.color.b = 1.0;
-      vm.publish(marker);
-
-      bs.publish(point);
-      persons.push_back(point);
+      output.push_back(ps);
 
     } catch (const tf2::ExtrapolationException& e) {
       ROS_ERROR("Error: %s", e.what());
     }
   }
+  return output;
 }
 
-void find_fires(cv::Mat& hsv) {
+// Publishers for Blue Square, Red Triangle and Vis Marker
+ros::Publisher bs;
+ros::Publisher rt;
+ros::Publisher vm;
+
+// Marker ID counter for RViz
+int marker_id = 0;
+
+void find_persons(const cv::Mat& hsv,
+                  const std_msgs::Header& imghdr,
+                  const sensor_msgs::LaserScan::ConstPtr& scn) {
+  // filter blue-ish colors
+  cv::Mat filtered;
+  cv::Scalar min_b = cv::Scalar(210 / 2, 255 / 2, 0);
+  cv::Scalar max_b = cv::Scalar(255 / 2, 255, 255);
+  cv::inRange(hsv, min_b, max_b, filtered);
+
+  // Track our Contours
+  std::vector<std::vector<cv::Point>> contours;
+  cv::findContours(filtered, contours, cv::RETR_EXTERNAL,
+                   cv::CHAIN_APPROX_SIMPLE);
+
+  // Determine position of candidate shapes
+  std::vector<cv::Point> points;
+  filter_copy_point(contours, 4, points);
+
+  // localize each of these 2D Points
+  std::vector<geometry_msgs::PointStamped> ps =
+      localize_publish_point(hsv, imghdr, scn, points);
+
+  // Publish the points and add them to the list of known points
+  for (const auto& p : ps) {
+    if (in_radius(p, persons)) {
+      continue;
+    }
+
+    bs.publish(p);
+
+    persons.push_back(p);
+
+    // add our marker
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = "map";
+    marker.header.stamp = ros::Time::now();
+    marker.ns = "vision";
+    marker.id = ++marker_id;
+    marker.type = visualization_msgs::Marker::CUBE;
+    marker.action = visualization_msgs::Marker::ADD;
+    marker.pose.position.x = p.point.x;
+    marker.pose.position.y = p.point.y;
+    marker.pose.position.z = 0;
+    marker.pose.orientation.x = 0.0;
+    marker.pose.orientation.y = 0.0;
+    marker.pose.orientation.z = 0.0;
+    marker.pose.orientation.w = 1.0;
+    marker.scale.x = 0.1;
+    marker.scale.y = 0.1;
+    marker.scale.z = 0.1;
+    marker.color.a = 1.0;
+    marker.color.r = 0.0;
+    marker.color.g = 0.0;
+    marker.color.b = 1.0;
+    vm.publish(marker);
+  }
+}
+
+void find_fires(const cv::Mat& hsv,
+                const std_msgs::Header& imghdr,
+                const sensor_msgs::LaserScan::ConstPtr& scn) {
   // filter red-ish colors
   cv::Mat filtered;
   cv::Scalar min_b = cv::Scalar(0 / 2, 255 / 2, 0);
@@ -203,10 +225,48 @@ void find_fires(cv::Mat& hsv) {
   cv::findContours(filtered, contours, cv::RETR_EXTERNAL,
                    cv::CHAIN_APPROX_SIMPLE);
 
-  // TODO: same as for persons
+  // Determine position of candidate shapes
+  std::vector<cv::Point> points;
+  filter_copy_point(contours, 3, points);
 
-  geometry_msgs::PointStamped point;
-  rt.publish(point);
+  // localize each of these 2D Points
+  std::vector<geometry_msgs::PointStamped> ps =
+      localize_publish_point(hsv, imghdr, scn, points);
+
+  // Publish the points and add them to the list of known points
+  for (const auto& p : ps) {
+    if (in_radius(p, fires)) {
+      continue;
+    }
+
+    rt.publish(p);
+
+    fires.push_back(p);
+
+    // add our marker
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = "map";
+    marker.header.stamp = ros::Time::now();
+    marker.ns = "vision";
+    marker.id = ++marker_id;
+    marker.type = visualization_msgs::Marker::CUBE;
+    marker.action = visualization_msgs::Marker::ADD;
+    marker.pose.position.x = p.point.x;
+    marker.pose.position.y = p.point.y;
+    marker.pose.position.z = 0;
+    marker.pose.orientation.x = 0.0;
+    marker.pose.orientation.y = 0.0;
+    marker.pose.orientation.z = 0.0;
+    marker.pose.orientation.w = 1.0;
+    marker.scale.x = 0.1;
+    marker.scale.y = 0.1;
+    marker.scale.z = 0.1;
+    marker.color.a = 1.0;
+    marker.color.r = 1.0;
+    marker.color.g = 0.0;
+    marker.color.b = 0.0;
+    vm.publish(marker);
+  }
 }
 
 // Just a dumb old function to check the camera and draw a preview
@@ -224,9 +284,7 @@ void callback(const sensor_msgs::Image::ConstPtr& img,
   cv::cvtColor(cv_img_ptr->image, hsv, cv::COLOR_BGR2HSV);
 
   find_persons(hsv, img->header, scn);
-  // find_fires(hsv, img->header);
-
-  // draw_preview(cv_img_ptr->image);
+  find_fires(hsv, img->header, scn);
 }
 
 int main(int argc, char** argv) {
