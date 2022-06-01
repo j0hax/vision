@@ -1,32 +1,4 @@
-#include <cv_bridge/cv_bridge.h>
-#include <geometry_msgs/PointStamped.h>
-#include <message_filters/subscriber.h>
-#include <message_filters/sync_policies/approximate_time.h>
-#include <message_filters/time_synchronizer.h>
-#include <ros/ros.h>
-#include <sensor_msgs/Image.h>
-#include <sensor_msgs/LaserScan.h>
-#include <std_msgs/Header.h>
-#include <tf2/utils.h>
-#include <tf2_ros/buffer.h>
-#include <tf2_ros/transform_listener.h>
-#include <visualization_msgs/Marker.h>
-#include <cmath>
-#include <opencv2/highgui.hpp>
-#include <opencv2/imgproc.hpp>
-#include <opencv2/opencv.hpp>
-
-// Raspberry Pi Camera FOV
-const std::size_t FOV = 62;
-
-// Inner limit of a sign on a frame: rule of thirds
-const double LIM = 1 / 3.0;
-
-// Minimum size for a sign
-const std::size_t MIN_AREA = 500;
-
-// Maximum distance a sign should be
-const float MAX_DIST = 1;
+#include "vision_node.h"
 
 tf2_ros::Buffer tfBuffer;
 
@@ -34,8 +6,6 @@ tf2_ros::Buffer tfBuffer;
 std::vector<geometry_msgs::PointStamped> fires;
 std::vector<geometry_msgs::PointStamped> persons;
 
-// Helper function to check if a point is already within another points' 3D
-// radius
 bool in_radius(const geometry_msgs::PointStamped point,
                const std::vector<geometry_msgs::PointStamped>& points,
                const double R = 1) {
@@ -62,8 +32,6 @@ bool in_radius(const geometry_msgs::PointStamped point,
   return false;
 }
 
-// Clean up detected contours, filter by number of edges and compute their
-// center points
 void filter_copy_point(const std::vector<std::vector<cv::Point>>& contours,
                        const int& sides,
                        std::vector<cv::Point>& points) {
@@ -96,7 +64,7 @@ std::vector<geometry_msgs::PointStamped> localize_publish_point(
 
   for (const auto& point : points) {
     // Calculate deviation from center (-50 to 50%)
-    float relative = (point.x - hsv.cols / 2) / (float)(hsv.cols);
+    double relative = (point.x - hsv.cols / 2) / (double)(hsv.cols);
 
     // First check: skip if sign is outside of the middle limit
     if (std::abs(relative) > LIM) {
@@ -108,15 +76,15 @@ std::vector<geometry_msgs::PointStamped> localize_publish_point(
     */
 
     // relative angle from camera center at 0°
-    float rel_angle = relative * FOV;
+    double rel_angle = relative * FOV;
 
     // absolute angle from camera center at 0°
     int angle = (360 + (int)rel_angle) % 360;
 
     // convert relative angle to radians (TODO: use rel or abs angle??)
-    float rad = rel_angle * (M_PI / 180.0);
+    double rad = rel_angle * (M_PI / 180.0);
 
-    float dist = 0;
+    double dist = 0;
     try {
       dist = (*scn).ranges.at(angle);
     } catch (const std::out_of_range& e) {
@@ -163,7 +131,7 @@ ros::Publisher rt;
 ros::Publisher vm;
 
 // Marker ID counter for RViz
-int marker_id = 0;
+std::size_t marker_id = 0;
 
 void find_persons(const cv::Mat& hsv,
                   const std_msgs::Header& imghdr,
