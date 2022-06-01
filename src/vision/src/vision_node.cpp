@@ -17,10 +17,16 @@
 #include <opencv2/opencv.hpp>
 
 // Raspberry Pi Camera FOV
-const int fov = 62;
+const std::size_t FOV = 62;
 
 // Inner limit of a sign on a frame: rule of thirds
-const double lim = 1 / 3.0;
+const double LIM = 1 / 3.0;
+
+// Minimum size for a sign
+const std::size_t MIN_AREA = 500;
+
+// Maximum distance a sign should be
+const float MAX_DIST = 1;
 
 tf2_ros::Buffer tfBuffer;
 
@@ -69,6 +75,12 @@ void filter_copy_point(const std::vector<std::vector<cv::Point>>& contours,
     // make sure the shape is of the specified type
     if (approx.size() == sides) {
       const cv::Moments m = cv::moments(approx);
+
+      // Skip if the area is too small
+      if (m.m00 < MIN_AREA) {
+        continue;
+      }
+
       const cv::Point center = cv::Point(m.m10 / m.m00, m.m01 / m.m00);
       points.push_back(center);
     }
@@ -87,7 +99,7 @@ std::vector<geometry_msgs::PointStamped> localize_publish_point(
     float relative = (point.x - hsv.cols / 2) / (float)(hsv.cols);
 
     // First check: skip if sign is outside of the middle limit
-    if (std::abs(relative) > lim) {
+    if (std::abs(relative) > LIM) {
       continue;
     }
 
@@ -96,7 +108,7 @@ std::vector<geometry_msgs::PointStamped> localize_publish_point(
     */
 
     // relative angle from camera center at 0°
-    float rel_angle = relative * fov;
+    float rel_angle = relative * FOV;
 
     // absolute angle from camera center at 0°
     int angle = (360 + (int)rel_angle) % 360;
@@ -113,7 +125,7 @@ std::vector<geometry_msgs::PointStamped> localize_publish_point(
     }
 
     // Second check: skip if the sign is too far away
-    if (dist > 1) {
+    if (dist > MAX_DIST) {
       continue;
     }
 
