@@ -30,6 +30,9 @@ const std::size_t MIN_AREA = 500;
 // Maximum distance a sign should be
 const float MAX_DIST = 1;
 
+// Color for HUD/Viewfinder
+const cv::Scalar HUD_COLOR = cv::Scalar(0, 255, 0);
+
 /* Function definitions */
 
 /*

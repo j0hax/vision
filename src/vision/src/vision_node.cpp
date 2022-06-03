@@ -2,6 +2,10 @@
 
 tf2_ros::Buffer tfBuffer;
 
+// Show contours in preview
+std::vector<std::vector<cv::Point>> red_contours;
+std::vector<std::vector<cv::Point>> blue_contours;
+
 // Keep track of the exact points
 std::vector<geometry_msgs::PointStamped> fires;
 std::vector<geometry_msgs::PointStamped> persons;
@@ -136,6 +140,9 @@ ros::Publisher rt;
 ros::Publisher bsm;
 ros::Publisher rtm;
 
+// Publish our preview image
+ros::Publisher prev;
+
 // Marker ID counter for RViz
 std::size_t marker_id = 0;
 
@@ -149,13 +156,12 @@ void find_persons(const cv::Mat& hsv,
   cv::inRange(hsv, min_b, max_b, filtered);
 
   // Track our Contours
-  std::vector<std::vector<cv::Point>> contours;
-  cv::findContours(filtered, contours, cv::RETR_EXTERNAL,
+  cv::findContours(filtered, blue_contours, cv::RETR_EXTERNAL,
                    cv::CHAIN_APPROX_SIMPLE);
 
   // Determine position of candidate shapes
   std::vector<cv::Point> points;
-  filter_copy_point(contours, 4, points);
+  filter_copy_point(blue_contours, 4, points);
 
   // localize each of these 2D Points
   std::vector<geometry_msgs::PointStamped> ps =
@@ -207,13 +213,12 @@ void find_fires(const cv::Mat& hsv,
   cv::inRange(hsv, min_b, max_b, filtered);
 
   // Track our Contours
-  std::vector<std::vector<cv::Point>> contours;
-  cv::findContours(filtered, contours, cv::RETR_EXTERNAL,
+  cv::findContours(filtered, red_contours, cv::RETR_EXTERNAL,
                    cv::CHAIN_APPROX_SIMPLE);
 
   // Determine position of candidate shapes
   std::vector<cv::Point> points;
-  filter_copy_point(contours, 3, points);
+  filter_copy_point(red_contours, 3, points);
 
   // localize each of these 2D Points
   std::vector<geometry_msgs::PointStamped> ps =
@@ -255,6 +260,19 @@ void find_fires(const cv::Mat& hsv,
   }
 }
 
+void draw_preview(const cv_bridge::CvImagePtr& cv_img_ptr) {
+  // Draw limits
+  cv::Point topl(LIM * cv_img_ptr->image.cols, LIM * cv_img_ptr->image.rows);
+  cv::Point botr(2 * LIM * cv_img_ptr->image.cols, 2* LIM * cv_img_ptr->image.rows);
+  cv::rectangle(cv_img_ptr->image, topl, botr, HUD_COLOR);
+
+  // Draw contours
+  cv::drawContours(cv_img_ptr->image, red_contours, 0, HUD_COLOR);
+  cv::drawContours(cv_img_ptr->image, blue_contours, 0, HUD_COLOR);
+
+  prev.publish(cv_img_ptr->toImageMsg());
+}
+
 // Just a dumb old function to check the camera and draw a preview
 void callback(const sensor_msgs::Image::ConstPtr& img,
               const sensor_msgs::LaserScan::ConstPtr& scn) {
@@ -271,6 +289,9 @@ void callback(const sensor_msgs::Image::ConstPtr& img,
 
   find_persons(hsv, img->header, scn);
   find_fires(hsv, img->header, scn);
+
+  // Draw preview code
+  draw_preview(cv_img_ptr);
 }
 
 int main(int argc, char** argv) {
@@ -297,6 +318,8 @@ int main(int argc, char** argv) {
 
   rtm = nh.advertise<visualization_msgs::Marker>("/red_triangle_marker", 0);
   bsm = nh.advertise<visualization_msgs::Marker>("/blue_square_marker", 0);
+
+  prev = nh.advertise<sensor_msgs::Image>("/camera/viewfinder", 1);
 
   ROS_INFO("Vision node has finished initializing!");
 
