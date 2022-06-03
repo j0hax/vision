@@ -151,8 +151,8 @@ void find_persons(const cv::Mat& hsv,
                   const sensor_msgs::LaserScan::ConstPtr& scn) {
   // filter blue-ish colors
   cv::Mat filtered;
-  cv::Scalar min_b = cv::Scalar(210 / 2, 255 / 2, 0);
-  cv::Scalar max_b = cv::Scalar(255 / 2, 255, 255);
+  cv::Scalar min_b = cv::Scalar(210 / 2, 50, 0);
+  cv::Scalar max_b = cv::Scalar(180, 255, 255);
   cv::inRange(hsv, min_b, max_b, filtered);
 
   // Track our Contours
