@@ -64,10 +64,15 @@ std::vector<geometry_msgs::PointStamped> localize_publish_point(
 
   for (const auto& point : points) {
     // Calculate deviation from center (-50 to 50%)
-    double relative = (point.x - hsv.cols / 2) / (double)(hsv.cols);
+    double rel_x = (point.x - hsv.cols / 2) / (double)(hsv.cols);
+    double rel_y = (point.y - hsv.rows / 2) / (double)(hsv.rows);
 
     // First check: skip if sign is outside of the middle limit
-    if (std::abs(relative) > LIM) {
+    if (std::abs(rel_x) > LIM) {
+      continue;
+    }
+
+    if (std::abs(rel_y) > LIM) {
       continue;
     }
 
@@ -76,7 +81,7 @@ std::vector<geometry_msgs::PointStamped> localize_publish_point(
     */
 
     // relative angle from camera center at 0°
-    double rel_angle = relative * FOV;
+    double rel_angle = rel_x * FOV;
 
     // absolute angle from camera center at 0°
     int angle = (360 + (int)rel_angle) % 360;
@@ -125,10 +130,11 @@ std::vector<geometry_msgs::PointStamped> localize_publish_point(
   return output;
 }
 
-// Publishers for Blue Square, Red Triangle and Vis Marker
+// Publishers for Blue Square, Red Triangle and Markers
 ros::Publisher bs;
 ros::Publisher rt;
-ros::Publisher vm;
+ros::Publisher bsm;
+ros::Publisher rtm;
 
 // Marker ID counter for RViz
 std::size_t marker_id = 0;
@@ -187,7 +193,7 @@ void find_persons(const cv::Mat& hsv,
     marker.color.r = 0.0;
     marker.color.g = 0.0;
     marker.color.b = 1.0;
-    vm.publish(marker);
+    bsm.publish(marker);
   }
 }
 
@@ -245,7 +251,7 @@ void find_fires(const cv::Mat& hsv,
     marker.color.r = 1.0;
     marker.color.g = 0.0;
     marker.color.b = 0.0;
-    vm.publish(marker);
+    rtm.publish(marker);
   }
 }
 
@@ -289,7 +295,8 @@ int main(int argc, char** argv) {
   bs = nh.advertise<geometry_msgs::PointStamped>("/blue_square_pos", 1);
   rt = nh.advertise<geometry_msgs::PointStamped>("/red_triangle_pos", 1);
 
-  vm = nh.advertise<visualization_msgs::Marker>("visualization_marker", 0);
+  rtm = nh.advertise<visualization_msgs::Marker>("/red_triangle_marker", 0);
+  bsm = nh.advertise<visualization_msgs::Marker>("/blue_square_marker", 0);
 
   ROS_INFO("Vision node has finished initializing!");
 
