@@ -10,6 +10,15 @@ Dieses ROS Modul dient dazu, mittels [OpenCV](https://opencv.org/) in einem Geb�
 
 Ermittelte Symbole werden gefiltert (um möglicherweise Duplikate zu vermeiden) und dann als `geometry_msgs::PointStamped` auf `/blue_square_pos` und `/red_triangle_pos` veröffentlicht.
 
+![Dependency Graph](doc/graph.png)
+
+## Entwicklungsscreenshots
+
+![Entfernungsmessung](doc/triangle.png)
+![Mustererkennung und Lidar](doc/woodwall.png)
+
+Voraussetzung zum Bestehen des Projektes war es auch, dass das Modul auf einem echten Turtlebot im Modellgebäude funktioniert. Leider gibt es hiervon keine Bilder.
+
 ## Abhängigkeiten
 
 - `ros-noetic-desktop-full`
@@ -18,7 +27,6 @@ Ermittelte Symbole werden gefiltert (um möglicherweise Duplikate zu vermeiden) 
 Die erforderlichen Simulationsdateien sind als Git-Submodul eingerichtet.
 
 Eventuell müssen noch `ros-noetic-navigation` installiert werden, um die Musterlösungen auszuführen.
-
 
 ## Bauen & Ausführen
 
